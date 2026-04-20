@@ -1,0 +1,14 @@
+services:
+  garage:
+    container_name: garage
+    image: dxflrs/garage:v2.3.0
+    # network_mode: "host"
+    restart: unless-stopped
+    ports:
+      - 33900:3900
+      - 33902:3902
+      - 33903:3903
+    volumes:
+      - ./storage/garage.toml:/etc/garage.toml
+      - ./storage/var/lib/garage/meta:/var/lib/garage/meta
+      - ./storage/var/lib/garage/data:/var/lib/garage/data
