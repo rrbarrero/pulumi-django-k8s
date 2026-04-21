@@ -1,3 +1,5 @@
+import os
+
 from django.http import JsonResponse
 from kubernetes import client, config
 from kubernetes.config.config_exception import ConfigException
@@ -16,7 +18,8 @@ def main(request):
     try:
         config_source = _load_kubernetes_config()
         v1 = client.CoreV1Api()
-        pods = v1.list_pod_for_all_namespaces(watch=False)
+        namespace = os.getenv("K8S_NAMESPACE", "default")
+        pods = v1.list_namespaced_pod(namespace=namespace, watch=False)
     except ConfigException as exc:
         return JsonResponse(
             {
@@ -37,6 +40,7 @@ def main(request):
     return JsonResponse(
         {
             "config_source": config_source,
+            "namespace": namespace,
             "pods": [
                 {
                     "name": pod.metadata.name,

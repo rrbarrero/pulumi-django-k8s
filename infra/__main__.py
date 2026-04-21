@@ -144,6 +144,40 @@ postgres_service = k8s.core.v1.Service(
 
 django_labels = {"app": "django"}
 
+django_service_account = k8s.core.v1.ServiceAccount(
+    "django",
+    metadata=namespaced_metadata(namespace_name, "django"),
+)
+
+django_role = k8s.rbac.v1.Role(
+    "django-pod-reader",
+    metadata=namespaced_metadata(namespace_name, "django-pod-reader"),
+    rules=[
+        {
+            "apiGroups": [""],
+            "resources": ["pods"],
+            "verbs": ["get", "list", "watch"],
+        }
+    ],
+)
+
+django_role_binding = k8s.rbac.v1.RoleBinding(
+    "django-pod-reader",
+    metadata=namespaced_metadata(namespace_name, "django-pod-reader"),
+    role_ref={
+        "apiGroup": "rbac.authorization.k8s.io",
+        "kind": "Role",
+        "name": "django-pod-reader",
+    },
+    subjects=[
+        {
+            "kind": "ServiceAccount",
+            "name": "django",
+            "namespace": namespace_name,
+        }
+    ],
+)
+
 django_deployment = k8s.apps.v1.Deployment(
     "django",
     metadata=namespaced_metadata(namespace_name, "django"),
@@ -157,6 +191,7 @@ django_deployment = k8s.apps.v1.Deployment(
                 "labels": django_labels,
             },
             "spec": {
+                "serviceAccountName": "django",
                 "containers": [
                     {
                         "name": "django",
@@ -184,6 +219,14 @@ django_deployment = k8s.apps.v1.Deployment(
                                     "app-secret",
                                     "DJANGO_SECRET_KEY",
                                 ),
+                            },
+                            {
+                                "name": "K8S_NAMESPACE",
+                                "valueFrom": {
+                                    "fieldRef": {
+                                        "fieldPath": "metadata.namespace",
+                                    }
+                                },
                             },
                         ],
                     }
