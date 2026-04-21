@@ -1,6 +1,9 @@
-.PHONY: garage build run kind-create kind-delete kind-status
+.PHONY: garage build run kind-create kind-delete kind-status app-image-build app-image-load app-image-push
 
 KIND_CLUSTER_NAME ?= pulumi-django-kind
+APP_IMAGE_NAME ?= pulumi-django
+APP_IMAGE_TAG ?= dev
+APP_IMAGE ?= $(APP_IMAGE_NAME):$(APP_IMAGE_TAG)
 
 garage:
 	docker exec -ti garage /garage $(filter-out $@,$(MAKECMDGOALS))
@@ -19,6 +22,14 @@ kind-delete:
 
 kind-status:
 	kind get clusters
+
+app-image-build:
+	docker build -t $(APP_IMAGE) pulumi-django
+
+app-image-load:
+	kind load docker-image $(APP_IMAGE) --name $(KIND_CLUSTER_NAME)
+
+app-image-push: app-image-build app-image-load
 
 %:
 	@:
