@@ -23,6 +23,7 @@ config = pulumi.Config()
 namespace = config.require("namespace")
 image = config.require("image")
 replicas = config.get_int("replicas") or 1
+ingress_host = config.get("ingress_host") or "django.local"
 db_name = config.require("db_name")
 db_user = config.require("db_user")
 db_password = config.require_secret("db_password")
@@ -52,6 +53,9 @@ app_config = k8s.core.v1.ConfigMap(
         "DATABASE_PORT": "5432",
         "DATABASE_NAME": db_name,
         "DATABASE_USER": db_user,
+        "DJANGO_ALLOWED_HOSTS": ",".join(
+            [ingress_host, "localhost", "127.0.0.1", "[::1]"]
+        ),
         "DJANGO_SETTINGS_MODULE": "pulumik8s.settings",
     },
 )
@@ -203,4 +207,78 @@ django_service = k8s.core.v1.Service(
     },
 )
 
+traefik = k8s.helm.v3.Release(
+    "traefik",
+    name="traefik",
+    chart="traefik",
+    repository_opts={
+        "repo": "https://traefik.github.io/charts",
+    },
+    namespace="traefik",
+    create_namespace=True,
+    values={
+        "service": {
+            "type": "NodePort",
+        },
+        "ingressClass": {
+            "enabled": True,
+            "isDefaultClass": False,
+            "name": "traefik",
+        },
+        "ports": {
+            "web": {
+                "nodePort": 30080,
+            },
+            "websecure": {
+                "nodePort": 30443,
+            },
+        },
+        "providers": {
+            "kubernetesIngress": {
+                "ingressClass": "traefik",
+            },
+            "kubernetesCRD": {
+                "ingressClass": "traefik",
+            },
+        },
+    },
+)
+
+django_ingress = k8s.networking.v1.Ingress(
+    "django",
+    metadata={
+        **namespaced_metadata(namespace_name, "django"),
+        "annotations": {
+            "pulumi.com/skipAwait": "true",
+        },
+    },
+    spec={
+        "ingressClassName": "traefik",
+        "rules": [
+            {
+                "host": ingress_host,
+                "http": {
+                    "paths": [
+                        {
+                            "path": "/",
+                            "pathType": "Prefix",
+                            "backend": {
+                                "service": {
+                                    "name": "django",
+                                    "port": {
+                                        "number": 8000,
+                                    },
+                                }
+                            },
+                        }
+                    ]
+                },
+            }
+        ],
+    },
+    opts=pulumi.ResourceOptions(depends_on=[traefik, django_service]),
+)
+
 pulumi.export("namespace", namespace_name)
+pulumi.export("ingress_host", ingress_host)
+pulumi.export("ingress_url", pulumi.Output.concat("http://", ingress_host))

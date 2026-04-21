@@ -16,7 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from cluster_info import views as cluster_info_views
 
 urlpatterns = [
+    path('', cluster_info_views.main, name='home'),
+    path('cluster-info/', cluster_info_views.main, name='cluster-info'),
     path('admin/', admin.site.urls),
 ]

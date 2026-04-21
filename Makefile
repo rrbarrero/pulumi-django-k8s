@@ -1,6 +1,7 @@
 .PHONY: garage build run kind-create kind-delete kind-status app-image-build app-image-load app-image-push
 
 KIND_CLUSTER_NAME ?= pulumi-django-kind
+KIND_CONFIG ?= kind-config.yaml
 APP_IMAGE_NAME ?= pulumi-django
 APP_IMAGE_TAG ?= dev
 APP_IMAGE ?= $(APP_IMAGE_NAME):$(APP_IMAGE_TAG)
@@ -15,7 +16,7 @@ run:
 	docker compose up -d && docker compose logs -f
 
 kind-create:
-	kind create cluster --name $(KIND_CLUSTER_NAME)
+	kind create cluster --name $(KIND_CLUSTER_NAME) --config $(KIND_CONFIG)
 
 kind-delete:
 	kind delete cluster --name $(KIND_CLUSTER_NAME)
