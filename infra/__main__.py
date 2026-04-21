@@ -1,6 +1,23 @@
 import pulumi
 import pulumi_kubernetes as k8s
 
+
+def namespaced_metadata(namespace_name, name):
+    return {
+        "namespace": namespace_name,
+        "name": name,
+    }
+
+
+def secret_key_ref(name, key):
+    return {
+        "secretKeyRef": {
+            "name": name,
+            "key": key,
+        }
+    }
+
+
 config = pulumi.Config()
 
 namespace = config.require("namespace")
@@ -16,12 +33,11 @@ ns = k8s.core.v1.Namespace(
     metadata={"name": namespace},
 )
 
+namespace_name = ns.metadata["name"]
+
 app_secret = k8s.core.v1.Secret(
     "app-secret",
-    metadata={
-        "namespace": ns.metadata["name"],
-        "name": "app-secret",
-    },
+    metadata=namespaced_metadata(namespace_name, "app-secret"),
     string_data={
         "DATABASE_PASSWORD": db_password,
         "DJANGO_SECRET_KEY": django_secret_key,
@@ -30,10 +46,7 @@ app_secret = k8s.core.v1.Secret(
 
 app_config = k8s.core.v1.ConfigMap(
     "app-config",
-    metadata={
-        "namespace": ns.metadata["name"],
-        "name": "app-config",
-    },
+    metadata=namespaced_metadata(namespace_name, "app-config"),
     data={
         "DATABASE_HOST": "postgres",
         "DATABASE_NAME": db_name,
@@ -46,10 +59,7 @@ app_config = k8s.core.v1.ConfigMap(
 
 postgres_pvc = k8s.core.v1.PersistentVolumeClaim(
     "postgres-pvc",
-    metadata={
-        "namespace": ns.metadata["name"],
-        "name": "postgres-pvc",
-    },
+    metadata=namespaced_metadata(namespace_name, "postgres-pvc"),
     spec={
         "accessModes": ["ReadWriteOnce"],
         "resources": {
@@ -61,13 +71,13 @@ postgres_pvc = k8s.core.v1.PersistentVolumeClaim(
 )
 
 postgres_labels = {"app": "postgres"}
+postgres_volume_name = "postgres-data"
+postgres_claim_name = "postgres-pvc"
+postgres_secret_name = "app-secret"
 
 postgres_deployment = k8s.apps.v1.Deployment(
     "postgres",
-    metadata={
-        "namespace": ns.metadata["name"],
-        "name": "postgres",
-    },
+    metadata=namespaced_metadata(namespace_name, "postgres"),
     spec={
         "selector": {
             "matchLabels": postgres_labels,
@@ -88,17 +98,15 @@ postgres_deployment = k8s.apps.v1.Deployment(
                             {"name": "POSTGRES_USER", "value": db_user},
                             {
                                 "name": "POSTGRES_PASSWORD",
-                                "valueFrom": {
-                                    "secretKeyRef": {
-                                        "name": "app-secret",
-                                        "key": "DATABASE_PASSWORD",
-                                    }
-                                },
+                                "valueFrom": secret_key_ref(
+                                    postgres_secret_name,
+                                    "DATABASE_PASSWORD",
+                                ),
                             },
                         ],
                         "volumeMounts": [
                             {
-                                "name": "postgres-data",
+                                "name": postgres_volume_name,
                                 "mountPath": "/var/lib/postgresql/data",
                             }
                         ],
@@ -106,9 +114,9 @@ postgres_deployment = k8s.apps.v1.Deployment(
                 ],
                 "volumes": [
                     {
-                        "name": "postgres-data",
+                        "name": postgres_volume_name,
                         "persistentVolumeClaim": {
-                            "claimName": "postgres-pvc",
+                            "claimName": postgres_claim_name,
                         },
                     }
                 ],
@@ -119,10 +127,7 @@ postgres_deployment = k8s.apps.v1.Deployment(
 
 postgres_service = k8s.core.v1.Service(
     "postgres",
-    metadata={
-        "namespace": ns.metadata["name"],
-        "name": "postgres",
-    },
+    metadata=namespaced_metadata(namespace_name, "postgres"),
     spec={
         "selector": postgres_labels,
         "ports": [
@@ -134,4 +139,4 @@ postgres_service = k8s.core.v1.Service(
     },
 )
 
-pulumi.export("namespace", ns.metadata["name"])
+pulumi.export("namespace", namespace_name)
