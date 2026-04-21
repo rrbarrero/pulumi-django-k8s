@@ -59,6 +59,8 @@ The Django app is exposed through Traefik on:
 
 The root route and `/cluster-info/` return JSON with the pods visible from the app namespace.
 
+![alt text](image1.png)
+
 ## Reproducing the setup
 
 ### 1. Start the local Pulumi backend
