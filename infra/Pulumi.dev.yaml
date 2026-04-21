@@ -1,7 +1,7 @@
 encryptionsalt: v1:1Hl6a7EzKS0=:v1:z84loNUeboqEngPH:81Aephiebvh5RNbrlTglnldnyPKsWg==
 config:
   django-kind:namespace: django-dev
-  django-kind:image: django-app:dev
+  django-kind:image: pulumi-django:dev
   django-kind:replicas: "1"
   django-kind:db_name: appdb
   django-kind:db_user: appuser

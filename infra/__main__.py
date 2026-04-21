@@ -49,11 +49,10 @@ app_config = k8s.core.v1.ConfigMap(
     metadata=namespaced_metadata(namespace_name, "app-config"),
     data={
         "DATABASE_HOST": "postgres",
+        "DATABASE_PORT": "5432",
         "DATABASE_NAME": db_name,
         "DATABASE_USER": db_user,
-        "DJANGO_SETTINGS_MODULE": "mysite.settings",
-        "IMAGE_PLACEHOLDER": image,
-        "REPLICAS_PLACEHOLDER": str(replicas),
+        "DJANGO_SETTINGS_MODULE": "pulumik8s.settings",
     },
 )
 
@@ -134,6 +133,71 @@ postgres_service = k8s.core.v1.Service(
             {
                 "port": 5432,
                 "targetPort": 5432,
+            }
+        ],
+    },
+)
+
+django_labels = {"app": "django"}
+
+django_deployment = k8s.apps.v1.Deployment(
+    "django",
+    metadata=namespaced_metadata(namespace_name, "django"),
+    spec={
+        "selector": {
+            "matchLabels": django_labels,
+        },
+        "replicas": replicas,
+        "template": {
+            "metadata": {
+                "labels": django_labels,
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "django",
+                        "image": image,
+                        "imagePullPolicy": "IfNotPresent",
+                        "ports": [{"containerPort": 8000}],
+                        "envFrom": [
+                            {
+                                "configMapRef": {
+                                    "name": "app-config",
+                                }
+                            }
+                        ],
+                        "env": [
+                            {
+                                "name": "DATABASE_PASSWORD",
+                                "valueFrom": secret_key_ref(
+                                    "app-secret",
+                                    "DATABASE_PASSWORD",
+                                ),
+                            },
+                            {
+                                "name": "DJANGO_SECRET_KEY",
+                                "valueFrom": secret_key_ref(
+                                    "app-secret",
+                                    "DJANGO_SECRET_KEY",
+                                ),
+                            },
+                        ],
+                    }
+                ],
+            },
+        },
+    },
+)
+
+django_service = k8s.core.v1.Service(
+    "django",
+    metadata=namespaced_metadata(namespace_name, "django"),
+    spec={
+        "selector": django_labels,
+        "ports": [
+            {
+                "port": 8000,
+                "targetPort": 8000,
             }
         ],
     },
