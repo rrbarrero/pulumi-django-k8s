@@ -44,4 +44,94 @@ app_config = k8s.core.v1.ConfigMap(
     },
 )
 
+postgres_pvc = k8s.core.v1.PersistentVolumeClaim(
+    "postgres-pvc",
+    metadata={
+        "namespace": ns.metadata["name"],
+        "name": "postgres-pvc",
+    },
+    spec={
+        "accessModes": ["ReadWriteOnce"],
+        "resources": {
+            "requests": {
+                "storage": "200Mi",
+            },
+        },
+    },
+)
+
+postgres_labels = {"app": "postgres"}
+
+postgres_deployment = k8s.apps.v1.Deployment(
+    "postgres",
+    metadata={
+        "namespace": ns.metadata["name"],
+        "name": "postgres",
+    },
+    spec={
+        "selector": {
+            "matchLabels": postgres_labels,
+        },
+        "replicas": 1,
+        "template": {
+            "metadata": {
+                "labels": postgres_labels,
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "name": "postgres",
+                        "image": "postgres:16",
+                        "ports": [{"containerPort": 5432}],
+                        "env": [
+                            {"name": "POSTGRES_DB", "value": db_name},
+                            {"name": "POSTGRES_USER", "value": db_user},
+                            {
+                                "name": "POSTGRES_PASSWORD",
+                                "valueFrom": {
+                                    "secretKeyRef": {
+                                        "name": "app-secret",
+                                        "key": "DATABASE_PASSWORD",
+                                    }
+                                },
+                            },
+                        ],
+                        "volumeMounts": [
+                            {
+                                "name": "postgres-data",
+                                "mountPath": "/var/lib/postgresql/data",
+                            }
+                        ],
+                    }
+                ],
+                "volumes": [
+                    {
+                        "name": "postgres-data",
+                        "persistentVolumeClaim": {
+                            "claimName": "postgres-pvc",
+                        },
+                    }
+                ],
+            },
+        },
+    },
+)
+
+postgres_service = k8s.core.v1.Service(
+    "postgres",
+    metadata={
+        "namespace": ns.metadata["name"],
+        "name": "postgres",
+    },
+    spec={
+        "selector": postgres_labels,
+        "ports": [
+            {
+                "port": 5432,
+                "targetPort": 5432,
+            }
+        ],
+    },
+)
+
 pulumi.export("namespace", ns.metadata["name"])
