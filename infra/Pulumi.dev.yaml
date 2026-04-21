@@ -1,1 +1,11 @@
 encryptionsalt: v1:1Hl6a7EzKS0=:v1:z84loNUeboqEngPH:81Aephiebvh5RNbrlTglnldnyPKsWg==
+config:
+  django-kind:namespace: django-dev
+  django-kind:image: django-app:dev
+  django-kind:replicas: "1"
+  django-kind:db_name: appdb
+  django-kind:db_user: appuser
+  django-kind:db_password:
+    secure: v1:1xF0bBQp93qy4ULX:lkWobQ/UL8HVyU37ayvlbVi+VjtIFtp1PqorUQ==
+  django-kind:django_secret_key:
+    secure: v1:x2GqLfraZ5Sn2s06:fsIMvcgkr5bUO1BEMBhvj/1FIvY5bgPnIdyMUkQX
