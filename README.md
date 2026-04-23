@@ -11,11 +11,21 @@ The stack includes:
 - Traefik installed with a Helm chart from Pulumi
 - two Pulumi stacks, `dev` and `stage`, deployed into the same cluster with different namespaces
 - an Ingress that routes `django.local` and `django-stage.local` to different Django services
+- a modular Pulumi codebase split into settings, shared resources, environment resources, and reusable components
+- automated tests for Pulumi helpers, stack orchestration, and policy guardrails
+- a GitHub Actions workflow that runs the Pulumi-related test suite on CI
 - a small Django view that talks to the Kubernetes API and lists pods from its own namespace
 
 ## Project layout
 
-- `infra/`: Pulumi program that creates the Kubernetes resources
+- `infra/`: Pulumi program and tests
+- `infra/settings.py`: typed and validated stack settings loaded from Pulumi config
+- `infra/common.py`: shared constants and helper functions
+- `infra/shared_resources.py`: shared cluster resources such as Traefik
+- `infra/environment_resources.py`: namespaced environment resources
+- `infra/components.py`: reusable Pulumi `ComponentResource` implementations for Postgres and Django
+- `infra/policies.py`: Policy as Code guardrails enforced during stack execution
+- `infra/tests/`: pytest suite for helpers, orchestration logic, and policies
 - `pulumi-django/`: Django application and Docker image
 - `kind-config.yaml`: Kind cluster configuration with port mappings for Traefik
 - `Makefile`: helper commands for Kind and Docker image workflows
@@ -62,6 +72,13 @@ The Django app is exposed through Traefik on:
 The root route and `/cluster-info/` return JSON with the pods visible from the app namespace.
 
 The `dev` and `stage` stacks share the same Kind cluster and the same Traefik installation, but each stack has its own namespace, database, Django deployment, service, and ingress host. The `stage` stack is configured with `install_traefik: false`, so it reuses the Traefik release managed by `dev` and avoids stack conflicts around the shared Helm release.
+
+The Pulumi program is intentionally structured as a small but realistic infrastructure codebase:
+
+- settings are loaded from Pulumi config and validated with Pydantic
+- environment resources are separated from shared resources
+- PostgreSQL and Django are modeled as Pulumi `ComponentResource` classes
+- policy checks are executed before creating selected resources
 
 ## Reproducing the setup
 
@@ -128,6 +145,37 @@ pulumi up --refresh
 
 The stage configuration is stored in `infra/Pulumi.stage.yaml`.
 
+## Quality checks
+
+The repository includes a small test suite for the infrastructure code:
+
+```bash
+make pulumi-test
+```
+
+This runs pytest against the Pulumi helpers, orchestration flow, and policies.
+
+You can also run a higher-level check that executes a preview first and then the tests:
+
+```bash
+make pulumi-check
+```
+
+The CI workflow in `.github/workflows/pulumi-tests.yml` runs the Pulumi-related tests on push and pull request.
+
+## Policy as Code
+
+The project includes a lightweight Policy as Code layer in `infra/policies.py`. These policies act as guardrails during `pulumi preview` and `pulumi up`, and they are also covered by pytest.
+
+Current policies include:
+
+- container images must not use the `:latest` tag
+- the `django-stage` environment must run at least `2` replicas
+- only the `django-dev` environment may manage the shared Traefik release
+- Kubernetes `Service` resources must not use `LoadBalancer`
+- the application `Ingress` must use `ingressClassName: traefik`
+- the `django-pod-reader` role must stay limited to `pods` with `get`, `list`, and `watch`
+
 ## Accessing the application
 
 Once the deployment is ready, open:
@@ -193,6 +241,8 @@ Check the cluster:
 
 ```bash
 make kind-status
+make pulumi-test
+make pulumi-check
 kubectl get pods -A
 kubectl get ingress -A
 kubectl get svc -A
@@ -228,3 +278,5 @@ kubectl -n traefik logs deployment/traefik --tail=100
 - Traefik is installed from Helm through Pulumi, not by running Helm manually.
 - The `dev` stack manages the shared Traefik release.
 - The `stage` stack reuses that Traefik installation and only manages namespaced application resources plus its own ingress.
+- The infrastructure code is split into modules to keep settings, shared resources, environment resources, and components separate.
+- The Pulumi code is covered by pytest and checked in CI.

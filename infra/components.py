@@ -16,6 +16,7 @@ from common import (
     namespaced_metadata,
     secret_key_ref,
 )
+from policies import validate_role_policy, validate_service_policy
 from settings import Settings
 
 
@@ -31,6 +32,16 @@ class PostgresComponent(pulumi.ComponentResource):
 
         postgres_labels = labels(POSTGRES_NAME)
         resource_opts = pulumi.ResourceOptions(parent=self)
+        postgres_service_spec = {
+            "selector": postgres_labels,
+            "ports": [
+                {
+                    "port": POSTGRES_PORT,
+                    "targetPort": POSTGRES_PORT,
+                }
+            ],
+        }
+        validate_service_policy(POSTGRES_NAME, postgres_service_spec)
 
         self.pvc = k8s.core.v1.PersistentVolumeClaim(
             POSTGRES_CLAIM_NAME,
@@ -103,15 +114,7 @@ class PostgresComponent(pulumi.ComponentResource):
         self.service = k8s.core.v1.Service(
             POSTGRES_NAME,
             metadata=namespaced_metadata(namespace_name, POSTGRES_NAME),
-            spec={
-                "selector": postgres_labels,
-                "ports": [
-                    {
-                        "port": POSTGRES_PORT,
-                        "targetPort": POSTGRES_PORT,
-                    }
-                ],
-            },
+            spec=postgres_service_spec,
             opts=resource_opts,
         )
 
@@ -135,6 +138,24 @@ class DjangoAppComponent(pulumi.ComponentResource):
 
         django_labels = labels(APP_NAME)
         resource_opts = pulumi.ResourceOptions(parent=self)
+        role_rules = [
+            {
+                "apiGroups": [""],
+                "resources": ["pods"],
+                "verbs": ["get", "list", "watch"],
+            }
+        ]
+        django_service_spec = {
+            "selector": django_labels,
+            "ports": [
+                {
+                    "port": DJANGO_CONTAINER_PORT,
+                    "targetPort": DJANGO_CONTAINER_PORT,
+                }
+            ],
+        }
+        validate_role_policy("django-pod-reader", role_rules)
+        validate_service_policy(APP_NAME, django_service_spec)
 
         self.service_account = k8s.core.v1.ServiceAccount(
             APP_NAME,
@@ -145,13 +166,7 @@ class DjangoAppComponent(pulumi.ComponentResource):
         self.role = k8s.rbac.v1.Role(
             "django-pod-reader",
             metadata=namespaced_metadata(namespace_name, "django-pod-reader"),
-            rules=[
-                {
-                    "apiGroups": [""],
-                    "resources": ["pods"],
-                    "verbs": ["get", "list", "watch"],
-                }
-            ],
+            rules=role_rules,
             opts=resource_opts,
         )
 
@@ -235,15 +250,7 @@ class DjangoAppComponent(pulumi.ComponentResource):
         self.service = k8s.core.v1.Service(
             APP_NAME,
             metadata=namespaced_metadata(namespace_name, APP_NAME),
-            spec={
-                "selector": django_labels,
-                "ports": [
-                    {
-                        "port": DJANGO_CONTAINER_PORT,
-                        "targetPort": DJANGO_CONTAINER_PORT,
-                    }
-                ],
-            },
+            spec=django_service_spec,
             opts=resource_opts,
         )
 

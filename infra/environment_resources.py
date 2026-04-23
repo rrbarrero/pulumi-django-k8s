@@ -15,6 +15,7 @@ from common import (
     namespaced_metadata,
 )
 from components import DjangoAppComponent, PostgresComponent
+from policies import validate_ingress_policy
 from settings import Settings
 
 
@@ -75,6 +76,32 @@ def create_ingress(
     ingress_host: str,
     dependencies: Sequence[pulumi.Resource],
 ) -> None:
+    ingress_spec = {
+        "ingressClassName": TRAEFIK_INGRESS_CLASS,
+        "rules": [
+            {
+                "host": ingress_host,
+                "http": {
+                    "paths": [
+                        {
+                            "path": "/",
+                            "pathType": "Prefix",
+                            "backend": {
+                                "service": {
+                                    "name": APP_NAME,
+                                    "port": {
+                                        "number": DJANGO_CONTAINER_PORT,
+                                    },
+                                }
+                            },
+                        }
+                    ]
+                },
+            }
+        ],
+    }
+    validate_ingress_policy(APP_NAME, ingress_spec)
+
     k8s.networking.v1.Ingress(
         APP_NAME,
         metadata={
@@ -83,29 +110,6 @@ def create_ingress(
                 "pulumi.com/skipAwait": "true",
             },
         },
-        spec={
-            "ingressClassName": TRAEFIK_INGRESS_CLASS,
-            "rules": [
-                {
-                    "host": ingress_host,
-                    "http": {
-                        "paths": [
-                            {
-                                "path": "/",
-                                "pathType": "Prefix",
-                                "backend": {
-                                    "service": {
-                                        "name": APP_NAME,
-                                        "port": {
-                                            "number": DJANGO_CONTAINER_PORT,
-                                        },
-                                    }
-                                },
-                            }
-                        ]
-                    },
-                }
-            ],
-        },
+        spec=ingress_spec,
         opts=pulumi.ResourceOptions(depends_on=dependencies),
     )

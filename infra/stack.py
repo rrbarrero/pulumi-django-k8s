@@ -8,12 +8,14 @@ from environment_resources import (
     create_namespace,
     create_postgres,
 )
+from policies import validate_settings_policies
 from settings import Settings, load_settings
 from shared_resources import create_traefik
 
 
 def main(settings: Settings | None = None) -> None:
     resolved_settings = settings or load_settings()
+    validate_settings_policies(resolved_settings)
     namespace_name = create_namespace(resolved_settings)
     create_app_configuration(resolved_settings, namespace_name)
     create_postgres(resolved_settings, namespace_name)
