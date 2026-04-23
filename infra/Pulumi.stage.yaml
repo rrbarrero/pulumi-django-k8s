@@ -1,0 +1,13 @@
+encryptionsalt: v1:uoTYFg0kz1s=:v1:9zjsAuc8OksjQn0L:1OXA9z/RSIMqDpJuaSKNyAjCjmv3WQ==
+config:
+  django-kind:namespace: django-stage
+  django-kind:image: pulumi-django:dev
+  django-kind:ingress_host: django-stage.local
+  django-kind:install_traefik: "false"
+  django-kind:replicas: "2"
+  django-kind:db_name: appdb-stage
+  django-kind:db_user: appuser-stage
+  django-kind:db_password:
+    secure: v1:Ra+iFc7Z4SAwoMSq:07uwr2rwuv3TV/YrP/2mcIAn+SaFj2MNNYZRyD1Z+g3jkRy3aFINKQwKAus2x+Qh
+  django-kind:django_secret_key:
+    secure: v1:PKodMyLwtf3M/mE9:7zlDdIvisCuctXLlr/tRFkY5H39yXsulHxsARjE123IwWxpdsT77Xfy6Z77/Juj6VvTmG64DVDAKIWbhlgqOU1hqq2ukdfinXHMl892108mMN70=

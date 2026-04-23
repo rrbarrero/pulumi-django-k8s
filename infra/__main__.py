@@ -24,10 +24,15 @@ namespace = config.require("namespace")
 image = config.require("image")
 replicas = config.get_int("replicas") or 1
 ingress_host = config.get("ingress_host") or "django.local"
+install_traefik = config.get_bool("install_traefik")
 db_name = config.require("db_name")
 db_user = config.require("db_user")
 db_password = config.require_secret("db_password")
 django_secret_key = config.require_secret("django_secret_key")
+
+if install_traefik is None:
+    """ Avoid reinstall on different environmets"""
+    install_traefik = True
 
 ns = k8s.core.v1.Namespace(
     "ns",
@@ -250,42 +255,46 @@ django_service = k8s.core.v1.Service(
     },
 )
 
-traefik = k8s.helm.v3.Release(
-    "traefik",
-    name="traefik",
-    chart="traefik",
-    repository_opts={
-        "repo": "https://traefik.github.io/charts",
-    },
-    namespace="traefik",
-    create_namespace=True,
-    values={
-        "service": {
-            "type": "NodePort",
+traefik_dependencies = [django_service]
+
+if install_traefik:
+    traefik = k8s.helm.v3.Release(
+        "traefik",
+        name="traefik",
+        chart="traefik",
+        repository_opts={
+            "repo": "https://traefik.github.io/charts",
         },
-        "ingressClass": {
-            "enabled": True,
-            "isDefaultClass": False,
-            "name": "traefik",
+        namespace="traefik",
+        create_namespace=True,
+        values={
+            "service": {
+                "type": "NodePort",
+            },
+            "ingressClass": {
+                "enabled": True,
+                "isDefaultClass": False,
+                "name": "traefik",
+            },
+            "ports": {
+                "web": {
+                    "nodePort": 30080,
+                },
+                "websecure": {
+                    "nodePort": 30443,
+                },
+            },
+            "providers": {
+                "kubernetesIngress": {
+                    "ingressClass": "traefik",
+                },
+                "kubernetesCRD": {
+                    "ingressClass": "traefik",
+                },
+            },
         },
-        "ports": {
-            "web": {
-                "nodePort": 30080,
-            },
-            "websecure": {
-                "nodePort": 30443,
-            },
-        },
-        "providers": {
-            "kubernetesIngress": {
-                "ingressClass": "traefik",
-            },
-            "kubernetesCRD": {
-                "ingressClass": "traefik",
-            },
-        },
-    },
-)
+    )
+    traefik_dependencies.append(traefik)
 
 django_ingress = k8s.networking.v1.Ingress(
     "django",
@@ -319,7 +328,7 @@ django_ingress = k8s.networking.v1.Ingress(
             }
         ],
     },
-    opts=pulumi.ResourceOptions(depends_on=[traefik, django_service]),
+    opts=pulumi.ResourceOptions(depends_on=traefik_dependencies),
 )
 
 pulumi.export("namespace", namespace_name)

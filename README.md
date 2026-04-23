@@ -9,7 +9,8 @@ The stack includes:
 - a Django application packaged as a Docker image
 - a PostgreSQL database running inside Kubernetes
 - Traefik installed with a Helm chart from Pulumi
-- an Ingress that routes `django.local` to the Django service
+- two Pulumi stacks, `dev` and `stage`, deployed into the same cluster with different namespaces
+- an Ingress that routes `django.local` and `django-stage.local` to different Django services
 - a small Django view that talks to the Kubernetes API and lists pods from its own namespace
 
 ## Project layout
@@ -56,10 +57,11 @@ If you do not want to use the local Garage backend, you can log into any other P
 The Django app is exposed through Traefik on:
 
 - `http://django.local:30080/`
+- `http://django-stage.local:30080/`
 
 The root route and `/cluster-info/` return JSON with the pods visible from the app namespace.
 
-![alt text](image1.png)
+The `dev` and `stage` stacks share the same Kind cluster and the same Traefik installation, but each stack has its own namespace, database, Django deployment, service, and ingress host. The `stage` stack is configured with `install_traefik: false`, so it reuses the Traefik release managed by `dev` and avoids stack conflicts around the shared Helm release.
 
 ## Reproducing the setup
 
@@ -87,12 +89,13 @@ Create the cluster with:
 make kind-create
 ```
 
-### 3. Point the hostname to your machine
+### 3. Point the hostnames to your machine
 
-Add this line to `/etc/hosts`:
+Add these lines to `/etc/hosts`:
 
 ```text
 127.0.0.1 django.local
+127.0.0.1 django-stage.local
 ```
 
 ### 4. Build and load the Django image into Kind
@@ -109,10 +112,21 @@ Move into the Pulumi project and apply the stack:
 
 ```bash
 cd infra
+pulumi stack select dev
 pulumi up --refresh
 ```
 
 The default development stack configuration is stored in `infra/Pulumi.dev.yaml`.
+
+To deploy the `stage` stack in the same cluster:
+
+```bash
+cd infra
+pulumi stack select stage
+pulumi up --refresh
+```
+
+The stage configuration is stored in `infra/Pulumi.stage.yaml`.
 
 ## Accessing the application
 
@@ -120,12 +134,38 @@ Once the deployment is ready, open:
 
 ```text
 http://django.local:30080/
+http://django-stage.local:30080/
 ```
 
 You can also query the namespace pod view directly:
 
 ```text
 http://django.local:30080/cluster-info/
+http://django-stage.local:30080/cluster-info/
+```
+
+## Multi-environment example
+
+The following output shows both environments running in the same cluster and each app only seeing pods from its own namespace:
+
+```bash
+$ curl http://django-stage.local:30080
+{"config_source":"in-cluster","namespace":"django-stage","pods":[{"name":"django-c699fc6cd-h67xs","namespace":"django-stage","ip":"10.244.0.11"},{"name":"django-c699fc6cd-n7mdp","namespace":"django-stage","ip":"10.244.0.9"},{"name":"postgres-5d6986578-7z9gg","namespace":"django-stage","ip":"10.244.0.12"}]}
+
+$ curl http://django.local:30080
+{"config_source":"in-cluster","namespace":"django-dev","pods":[{"name":"django-c699fc6cd-5445p","namespace":"django-dev","ip":"10.244.0.5"},{"name":"postgres-788d6f6b44-5mp2f","namespace":"django-dev","ip":"10.244.0.8"}]}
+```
+
+You can also inspect both namespaces at once with:
+
+```bash
+$ kubectl get pods -A -o wide | grep -E '^(django-dev|django-stage)\s'
+
+django-dev           django-c699fc6cd-5445p     1/1   Running   0              57m     10.244.0.5    pulumi-django-kind-control-plane   <none>   <none>
+django-dev           postgres-788d6f6b44-5mp2f  1/1   Running   0              57m     10.244.0.8    pulumi-django-kind-control-plane   <none>   <none>
+django-stage         django-c699fc6cd-h67xs     1/1   Running   2 (6m6s ago)   6m15s   10.244.0.11   pulumi-django-kind-control-plane   <none>   <none>
+django-stage         django-c699fc6cd-n7mdp     1/1   Running   2 (6m6s ago)   6m15s   10.244.0.9    pulumi-django-kind-control-plane   <none>   <none>
+django-stage         postgres-5d6986578-7z9gg   1/1   Running   0              6m15s   10.244.0.12   pulumi-django-kind-control-plane   <none>   <none>
 ```
 
 ## Updating the Django app
@@ -139,6 +179,13 @@ kubectl -n django-dev rollout status deployment/django
 ```
 
 Pulumi will not detect code-only changes if the image tag stays the same.
+
+For `stage`, restart the deployment in the `django-stage` namespace:
+
+```bash
+kubectl -n django-stage rollout restart deployment/django
+kubectl -n django-stage rollout status deployment/django
+```
 
 ## Useful commands
 
@@ -157,7 +204,8 @@ Recreate the cluster:
 make kind-delete
 make kind-create
 make app-image-push
-cd infra && pulumi up --refresh
+cd infra && pulumi stack select dev && pulumi up --refresh
+cd infra && pulumi stack select stage && pulumi up --refresh
 ```
 
 Inspect Django logs:
@@ -178,3 +226,5 @@ kubectl -n traefik logs deployment/traefik --tail=100
 - The Django app talks to the Kubernetes API using an in-cluster service account.
 - The service account is restricted to listing pods only inside its own namespace.
 - Traefik is installed from Helm through Pulumi, not by running Helm manually.
+- The `dev` stack manages the shared Traefik release.
+- The `stage` stack reuses that Traefik installation and only manages namespaced application resources plus its own ingress.

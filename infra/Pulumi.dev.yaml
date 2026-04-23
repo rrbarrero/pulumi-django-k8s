@@ -3,6 +3,7 @@ config:
   django-kind:namespace: django-dev
   django-kind:image: pulumi-django:dev
   django-kind:ingress_host: django.local
+  django-kind:install_traefik: "true"
   django-kind:replicas: "1"
   django-kind:db_name: appdb
   django-kind:db_user: appuser
