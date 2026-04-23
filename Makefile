@@ -1,4 +1,4 @@
-.PHONY: garage build run kind-create kind-delete kind-status app-image-build app-image-load app-image-push
+.PHONY: garage build run kind-create kind-delete kind-status app-image-build app-image-load app-image-push pulumi-test
 
 KIND_CLUSTER_NAME ?= pulumi-django-kind
 KIND_CONFIG ?= kind-config.yaml
@@ -31,6 +31,9 @@ app-image-load:
 	kind load docker-image $(APP_IMAGE) --name $(KIND_CLUSTER_NAME)
 
 app-image-push: app-image-build app-image-load
+
+pulumi-test:
+	cd infra && ./.venv/bin/python -m pytest -q
 
 %:
 	@:
