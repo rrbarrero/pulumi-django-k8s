@@ -1,4 +1,4 @@
-.PHONY: garage build run kind-create kind-delete kind-status app-image-build app-image-load app-image-push pulumi-test
+.PHONY: garage build run kind-create kind-delete kind-status app-image-build app-image-load app-image-push pulumi-test pulumi-check
 
 KIND_CLUSTER_NAME ?= pulumi-django-kind
 KIND_CONFIG ?= kind-config.yaml
@@ -34,6 +34,10 @@ app-image-push: app-image-build app-image-load
 
 pulumi-test:
 	cd infra && ./.venv/bin/python -m pytest -q
+
+pulumi-check:
+	cd infra && pulumi preview
+	$(MAKE) pulumi-test
 
 %:
 	@:
